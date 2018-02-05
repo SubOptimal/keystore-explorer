@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -23,6 +23,9 @@ import java.awt.Toolkit;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.text.MessageFormat;
@@ -32,13 +35,17 @@ import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.KeyStroke;
 
-import org.apache.commons.io.IOUtils;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.kse.crypto.CryptoException;
+import org.kse.crypto.Password;
 import org.kse.crypto.csr.pkcs10.Pkcs10Util;
 import org.kse.crypto.csr.spkac.Spkac;
 import org.kse.crypto.filetype.CryptoFileType;
 import org.kse.crypto.filetype.CryptoFileUtil;
+import org.kse.crypto.privatekey.MsPvkUtil;
+import org.kse.crypto.privatekey.OpenSslPvkUtil;
+import org.kse.crypto.privatekey.Pkcs8Util;
+import org.kse.crypto.publickey.OpenSslPubUtil;
 import org.kse.crypto.x509.X509CertUtil;
 import org.kse.gui.CurrentDirectory;
 import org.kse.gui.FileChooserFactory;
@@ -46,9 +53,12 @@ import org.kse.gui.KseFrame;
 import org.kse.gui.dialogs.DViewCertificate;
 import org.kse.gui.dialogs.DViewCrl;
 import org.kse.gui.dialogs.DViewCsr;
+import org.kse.gui.dialogs.DViewPrivateKey;
+import org.kse.gui.dialogs.DViewPublicKey;
 import org.kse.gui.error.DError;
 import org.kse.gui.error.DProblem;
 import org.kse.gui.error.Problem;
+import org.kse.gui.password.DGetPassword;
 
 
 /**
@@ -95,11 +105,9 @@ public class ExamineFileAction extends KeyStoreExplorerAction {
 		}
 
 		OpenAction openAction = new OpenAction(kseFrame);
-		FileInputStream is = null;
-		try {
+		try (FileInputStream is = new FileInputStream(file)) {
 
 			// detect file type and use the right action class for opening the file
-			is = new FileInputStream(file);
 			CryptoFileType fileType = CryptoFileUtil.detectFileType(is);
 
 			switch (fileType) {
@@ -121,6 +129,17 @@ public class ExamineFileAction extends KeyStoreExplorerAction {
 			case SPKAC_CSR:
 				openCsr(file, fileType);
 				break;
+			case ENC_PKCS8_PVK:
+			case UNENC_PKCS8_PVK:
+			case ENC_OPENSSL_PVK:
+			case UNENC_OPENSSL_PVK:
+			case ENC_MS_PVK:
+			case UNENC_MS_PVK:
+				openPrivateKey(file, fileType);
+				break;
+			case OPENSSL_PUB:
+				openPublicKey(file);
+				break;
 			case UNKNOWN:
 			default:
 				JOptionPane.showMessageDialog(frame,
@@ -128,11 +147,13 @@ public class ExamineFileAction extends KeyStoreExplorerAction {
 						res.getString("ExamineFileAction.ExamineFile.Title"), JOptionPane.WARNING_MESSAGE);
 				break;
 			}
-
+		} catch (FileNotFoundException ex) {
+			JOptionPane.showMessageDialog(frame,
+					MessageFormat.format(res.getString("ExamineFileAction.NotFile.message"), file),
+					res.getString("ExamineFileAction.ExamineFile.Title"), JOptionPane.WARNING_MESSAGE);
+			return;
 		} catch (Exception ex) {
 			DError.displayError(frame, ex);
-		} finally {
-			IOUtils.closeQuietly(is);
 		}
 	}
 
@@ -157,10 +178,6 @@ public class ExamineFileAction extends KeyStoreExplorerAction {
 		X509CRL crl = null;
 		try {
 			crl = X509CertUtil.loadCRL(new FileInputStream(crlFile));
-		} catch (FileNotFoundException ex) {
-			JOptionPane.showMessageDialog(frame,
-					MessageFormat.format(res.getString("ExamineFileAction.NoReadFile.message"), crlFile),
-					res.getString("ExamineFileAction.OpenCrl.Title"), JOptionPane.WARNING_MESSAGE);
 		} catch (Exception ex) {
 			String problemStr = MessageFormat.format(res.getString("ExamineFileAction.NoOpenCrl.Problem"),
 					crlFile.getName());
@@ -184,57 +201,112 @@ public class ExamineFileAction extends KeyStoreExplorerAction {
 		}
 	}
 
-	private void openCsr(File csrFile, CryptoFileType fileType) {
-		if (csrFile == null) {
+	private void openCsr(File file, CryptoFileType fileType) throws CryptoException {
+		if (file == null) {
 			return;
 		}
 
+		PKCS10CertificationRequest pkcs10Csr = null;
+		Spkac spkacCsr = null;
+
 		try {
-			PKCS10CertificationRequest pkcs10Csr = null;
-			Spkac spkacCsr = null;
-
-			try {
-				if (fileType == CryptoFileType.PKCS10_CSR) {
-					pkcs10Csr = Pkcs10Util.loadCsr(new FileInputStream(csrFile));
-				} else if (fileType == CryptoFileType.SPKAC_CSR) {
-					spkacCsr = new Spkac(new FileInputStream(csrFile));
-				}
-			} catch (FileNotFoundException ex) {
-				JOptionPane.showMessageDialog(frame,
-						MessageFormat.format(res.getString("ExamineCsrAction.NotFile.message"), csrFile),
-						res.getString("ExamineFileAction.ExamineCsr.Title"), JOptionPane.WARNING_MESSAGE);
-				return;
-			} catch (Exception ex) {
-				String problemStr = MessageFormat.format(res.getString("ExamineFileAction.NoOpenCsr.Problem"),
-						csrFile.getName());
-
-				String[] causes = new String[] { res.getString("ExamineFileAction.NotCsr.Cause"),
-						res.getString("ExamineFileAction.CorruptedCsr.Cause") };
-
-				Problem problem = new Problem(problemStr, causes, ex);
-
-				DProblem dProblem = new DProblem(frame, res.getString("ExamineFileAction.ProblemOpeningCsr.Title"),
-						problem);
-				dProblem.setLocationRelativeTo(frame);
-				dProblem.setVisible(true);
-
-				return;
-			}
-
-			if (pkcs10Csr != null) {
-				DViewCsr dViewCsr = new DViewCsr(frame, MessageFormat.format(
-						res.getString("ExamineFileAction.CsrDetailsFile.Title"), csrFile.getName()), pkcs10Csr);
-				dViewCsr.setLocationRelativeTo(frame);
-				dViewCsr.setVisible(true);
-			} else {
-				DViewCsr dViewCsr = new DViewCsr(frame, MessageFormat.format(
-						res.getString("ExamineFileAction.CsrDetailsFile.Title"), csrFile.getName()), spkacCsr);
-				dViewCsr.setLocationRelativeTo(frame);
-				dViewCsr.setVisible(true);
+			if (fileType == CryptoFileType.PKCS10_CSR) {
+				pkcs10Csr = Pkcs10Util.loadCsr(new FileInputStream(file));
+			} else if (fileType == CryptoFileType.SPKAC_CSR) {
+				spkacCsr = new Spkac(new FileInputStream(file));
 			}
 		} catch (Exception ex) {
-			DError.displayError(frame, ex);
+			String problemStr = MessageFormat.format(res.getString("ExamineFileAction.NoOpenCsr.Problem"),
+					file.getName());
+
+			String[] causes = new String[] { res.getString("ExamineFileAction.NotCsr.Cause"),
+					res.getString("ExamineFileAction.CorruptedCsr.Cause") };
+
+			Problem problem = new Problem(problemStr, causes, ex);
+
+			DProblem dProblem = new DProblem(frame, res.getString("ExamineFileAction.ProblemOpeningCsr.Title"),
+					problem);
+			dProblem.setLocationRelativeTo(frame);
+			dProblem.setVisible(true);
+
+			return;
 		}
+
+		if (pkcs10Csr != null) {
+			DViewCsr dViewCsr = new DViewCsr(frame, MessageFormat.format(
+					res.getString("ExamineFileAction.CsrDetailsFile.Title"), file.getName()), pkcs10Csr);
+			dViewCsr.setLocationRelativeTo(frame);
+			dViewCsr.setVisible(true);
+		} else {
+			DViewCsr dViewCsr = new DViewCsr(frame, MessageFormat.format(
+					res.getString("ExamineFileAction.CsrDetailsFile.Title"), file.getName()), spkacCsr);
+			dViewCsr.setLocationRelativeTo(frame);
+			dViewCsr.setVisible(true);
+		}
+	}
+
+	private void openPrivateKey(File file, CryptoFileType fileType) throws IOException, CryptoException {
+
+		PrivateKey privKey = null;
+		Password password = null;
+
+		switch (fileType) {
+		case ENC_PKCS8_PVK:
+			password = getPassword(file);
+			if (password == null || password.isNulled()) {
+				return;
+			}
+			privKey = Pkcs8Util.loadEncrypted(new FileInputStream(file), password);
+			break;
+		case UNENC_PKCS8_PVK:
+			privKey = Pkcs8Util.load(new FileInputStream(file));
+			break;
+		case ENC_OPENSSL_PVK:
+			password = getPassword(file);
+			if (password == null || password.isNulled()) {
+				return;
+			}
+			privKey = OpenSslPvkUtil.loadEncrypted(new FileInputStream(file), password);
+			break;
+		case UNENC_OPENSSL_PVK:
+			privKey = OpenSslPvkUtil.load(new FileInputStream(file));
+			break;
+		case ENC_MS_PVK:
+			password = getPassword(file);
+			if (password == null || password.isNulled()) {
+				return;
+			}
+			privKey = MsPvkUtil.loadEncrypted(new FileInputStream(file), password);
+			break;
+		case UNENC_MS_PVK:
+			privKey = MsPvkUtil.load(new FileInputStream(file));
+			break;
+		default:
+			break;
+		}
+
+		DViewPrivateKey dViewPrivateKey = new DViewPrivateKey(frame, MessageFormat.format(
+				res.getString("ExamineFileAction.PrivateKeyDetailsFile.Title"), file.getName()), privKey, null);
+		dViewPrivateKey.setLocationRelativeTo(frame);
+		dViewPrivateKey.setVisible(true);
+	}
+
+	private void openPublicKey(File file) throws IOException, CryptoException {
+
+		PublicKey publicKey = OpenSslPubUtil.load(new FileInputStream(file));
+
+		DViewPublicKey dViewPublicKey = new DViewPublicKey(frame, MessageFormat.format(
+				res.getString("ExamineFileAction.PublicKeyDetailsFile.Title"), file.getName()), publicKey);
+		dViewPublicKey.setLocationRelativeTo(frame);
+		dViewPublicKey.setVisible(true);
+	}
+
+	private Password getPassword(File file) {
+		DGetPassword dGetPassword = new DGetPassword(frame, MessageFormat.format(
+				res.getString("ExamineFileAction.EnterPassword.Title"), file.getName()));
+		dGetPassword.setLocationRelativeTo(frame);
+		dGetPassword.setVisible(true);
+		return dGetPassword.getPassword();
 	}
 
 	private File chooseFile() {

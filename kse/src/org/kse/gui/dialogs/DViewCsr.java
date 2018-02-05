@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -414,7 +414,7 @@ public class DViewCsr extends JEscDialog {
 
 	private void pemEncodingPressed() {
 		try {
-			DViewCertCsrPem dViewCsrPem = new DViewCertCsrPem(this, res.getString("DViewCsr.Pem.Title"),
+			DViewPem dViewCsrPem = new DViewPem(this, res.getString("DViewCsr.Pem.Title"),
 					pkcs10Csr);
 			dViewCsrPem.setLocationRelativeTo(this);
 			dViewCsrPem.setVisible(true);

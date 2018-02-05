@@ -1,0 +1,337 @@
+/*
+  Copyright 2004 - 2013 Wayne Grant
+            2013 - 2018 Kai Kramer
+  
+  This file is part of KeyStore Explorer.
+  
+  KeyStore Explorer is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+  
+  KeyStore Explorer is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+  
+  You should have received a copy of the GNU General Public License
+  along with KeyStore Explorer. If not, see <http://www.gnu.org/licenses/>.
+*/
+import org.apache.tools.ant.taskdefs.condition.Os
+import org.apache.tools.ant.filters.ReplaceTokens
+import java.nio.file.Paths
+
+/*
+Notes:
+- Tasks 'launch4j' and 'nsis' work only under Windows.
+- Task 'nsis' requires an installation of NSIS and its top-level directory added to the path.
+  Also, the WinShell plugin (http://nsis.sourceforge.net/WinShell_plug-in) has to be added to the NSIS installation.
+- Tasks 'signapp' and 'dmg' work only under macOS.
+*/
+buildscript {
+	repositories {
+		mavenCentral()
+	}
+	dependencies {
+		classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.2'
+	}
+}
+
+apply plugin: 'java'
+apply plugin: 'eclipse'
+apply plugin: 'idea'
+apply plugin: 'org.junit.platform.gradle.plugin'
+
+defaultTasks 'zip'
+
+repositories {
+	mavenCentral()
+}
+
+sourceSets {
+	main.java.srcDirs = ['src']
+	main.resources.srcDirs = ['src']
+	main.resources.excludes = [ '**/*.java', '**/Thumbs.db' ]
+	test.java.srcDirs = ['test']
+	test.resources.srcDirs = ['test']
+	test.resources.excludes = [ '**/*.java' ]
+}
+
+Properties props = new Properties()
+props.load(project.rootProject.file('src/org/kse/version.properties').newDataInputStream())
+version = props."KSE.Version"
+
+ext {
+	appName = props."KSE.Name"
+	appVersion = props."KSE.Version"
+	appSimpleName = project.hasProperty('appSimpleName') ? project.getProperty('appSimpleName') : props."KSE.SimpleName"
+	appSimpleVersion = props."KSE.SimpleVersion"
+	appUserModelId = props."KSE.AppUserModelId"
+	distFileNamePrefix = "$appSimpleName-$appSimpleVersion"
+	appJarName = "${appSimpleName}.jar"
+	appExe = "${appSimpleName}.exe"
+	appBundle = "${appName}.app"
+	
+	// Directories
+	resDir = "$projectDir/res"
+	iconsDir = "$resDir/icons"
+	licensesDir = "$resDir/licenses"
+	readmesDir = "$resDir/readmes"
+	launch4jOutDir = "$buildDir/launch4j"
+	appBundleDir = "$buildDir/appBundle"
+	dependenciesDir = Paths.get(buildDir.toString(), "dependencies") // for NSIS we need Windows path separators
+
+	// Icons
+	kseIco = "$iconsDir/kse.ico"
+	ksePng = "$iconsDir/kse.png"
+	kseIcns = "$iconsDir/kse.icns"
+	keystoreIcns = "$iconsDir/keystore.icns"
+
+	// Vendor details
+	copyright = "Copyright 2004 - 2013 Wayne Grant, 2013 - 2018 Kai Kramer"
+	vendor = "Wayne Grant, Kai Kramer"
+	website = "keystore-explorer.org"
+	
+	// Java Help properties
+	helpCfg = "$projectDir/help/help.cfg"
+	helpDir = sourceSets.main.resources.srcDirs.first().getAbsolutePath() + "/org/kse/gui/help"
+	helpSearchIndexDir = "$buildDir/searchindex" 
+	helpSearchIndexDirDist = "org/kse/gui/help/searchindex" 
+
+	// Main class (for manifest entry)
+	mainClass = "org.kse.KSE"
+}
+
+// Unit tests make use of Java 8 features, but KSE should be compatible with Java 7 and Eclipse has only per-project settings 
+// (see bug report for same problem in m2e: https://bugs.eclipse.org/bugs/show_bug.cgi?id=464505)
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+compileJava {
+	sourceCompatibility = 1.7
+	targetCompatibility = 1.7
+}
+
+dependencies {
+	compile group: 'org.bouncycastle', name: 'bcpkix-jdk15on', version: '1.58'
+	compile group: 'net.java.dev.jna', name: 'jna', version: '4.1.0'
+	compile group: 'commons-io', name: 'commons-io', version: '2.6'
+	compile group: 'javax.help', name: 'javahelp', version: '2.0.05'
+	compile group: 'com.miglayout', name: 'miglayout-swing', version: '5.0'
+	compile group: 'com.jgoodies', name: 'jgoodies-common', version: '1.8.1'
+	compile group: 'com.jgoodies', name: 'jgoodies-looks', version: '2.7.0'
+
+	// Darcula lnf not in a public repository yet
+	if (file("lib/darcula.jar").exists()) {
+		compile files('lib/darcula.jar')
+	}
+	
+	testCompile("org.assertj:assertj-core:3.9.0")
+	testCompile("org.junit.jupiter:junit-jupiter-api:5.0.2")
+	testCompile("org.junit.jupiter:junit-jupiter-params:5.0.2")
+	testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.2")
+	
+	// for eclipse
+	testRuntime('org.junit.platform:junit-platform-launcher:1.0.2')
+	
+	// To avoid compiler warnings about @API annotations in JUnit code:
+	testCompileOnly('org.apiguardian:apiguardian-api:1.0.0')
+}
+
+task javaHelpIndex(type: JavaExec, dependsOn: compileJava) {
+	main = 'com.sun.java.help.search.Indexer'
+	classpath = sourceSets.main.runtimeClasspath
+	ignoreExitValue = false
+	workingDir = helpDir
+	args '-c', helpCfg, '-db', helpSearchIndexDir
+}
+
+jar {
+	dependsOn javaHelpIndex
+	version = null
+	into(helpSearchIndexDirDist) {
+		from helpSearchIndexDir
+	} 
+	manifest {
+		attributes('Built-JDK': System.getProperty('java.version'),
+					'Implementation-Title': project.appName,
+					'Implementation-Version': project.version,
+					'Implementation-Vendor': project.vendor,
+					'Specification-Title': project.appName,
+					'Specification-Version': project.version,
+					'Specification-Vendor': project.vendor,
+					'Main-Class': project.mainClass,
+					'Class-Path': configurations.compile.collect { 'lib/' + it.getName() }.join(' '),
+					'Built-Date': new Date().format("yyyy-MM-dd HH:mm:ss"),
+					'SplashScreen-Image': 'org/kse/gui/images/splash.png',
+					'Sealed': 'true'
+					)
+	}
+}
+
+task launch4j(dependsOn: jar) {
+	onlyIf {
+		Os.isFamily(Os.FAMILY_WINDOWS)
+	}
+	doLast {
+		ant.taskdef(name: 'launch4j', classname: 'net.sf.launch4j.ant.Launch4jTask') {
+			classpath {
+				fileset(dir: 'launch4j', includes: 'launch4j.jar,lib/xstream.jar' )
+			}
+		}
+		mkdir launch4jOutDir
+		ant.launch4j() {
+			config(headerType: "gui", 
+					jarpath: appJarName, 
+					outfile: "$launch4jOutDir/$appExe", 
+					dontWrapJar: "true", 
+					errTitle: appName, 
+					stayAlive: "false", 
+					icon: kseIco ) {
+				jre(minVersion: "1.7.0", path: "jre") {
+					opt = "-Dkse.exe=true"
+				}
+				versionInfo(fileVersion: "$appVersion.0", 
+							fileDescription: appName, 
+							copyright: copyright,
+							internalName: appSimpleName, 
+							originalFilename: appExe, 
+							productName: appName, 
+							productVersion: "$appVersion.0", 
+							txtFileVersion: appVersion, 
+							txtProductVersion: appVersion )
+			}
+		}
+	}
+}
+
+task zip(type: Zip, dependsOn: launch4j) {
+	version = appSimpleVersion
+	into(distFileNamePrefix) { 
+		from jar.archivePath
+		from "$launch4jOutDir/$appExe"
+		from(resDir) {
+			include 'kse.sh'
+			fileMode 755
+		} 
+		from(readmesDir) {
+			include 'readme.txt'
+		} 
+	}
+	into("$distFileNamePrefix/lib") {
+		from configurations.runtime
+	}
+	into("$distFileNamePrefix/licenses") { 
+		from(licensesDir) {
+			include '**/*.txt'
+			if (!file("lib/darcula.jar").exists()) {
+				exclude 'license-darcula.txt' 
+			} 
+		} 
+	}
+	into("$distFileNamePrefix/icons") { 
+		from(iconsDir) {
+			include '**/kse_*.png'
+		} 
+	}
+}
+
+task copyDependencies(type: Copy) {
+   from configurations.compile
+   into dependenciesDir
+}
+
+task nsis(dependsOn: [launch4j, copyDependencies]) {
+	doLast {
+		def nsisScript = "kse.nsi"
+		copy {
+			from("nsis/${nsisScript}.template")
+			rename("${nsisScript}.template", nsisScript)
+			filter(ReplaceTokens, beginToken: '%', endToken: '%', tokens: [
+				KSE_NAME: appName, 
+				KSE_VERSION: appVersion, 
+				KSE_SIMPLE_VERSION: appSimpleVersion, 
+				KSE_APP_USER_MODEL_ID: appUserModelId,
+				ICONS_DIR: iconsDir.toString(),
+				LICENSES_DIR: licensesDir.toString(),
+				JAR_DIR: libsDir.toString(),
+				LIB_DIR: dependenciesDir.toString(),
+				LAUNCH4J_DIR: launch4jOutDir.toString(),
+				DIST_DIR: distsDir.toString()
+			])
+			into("nsis")
+		}
+		exec {
+			workingDir "$projectDir/nsis"
+			commandLine "makensis", "/V2", nsisScript
+		}
+	}
+}
+
+task appbundler(dependsOn: [jar, copyDependencies]) {
+	doLast {
+		ant.taskdef(name: 'bundleapp', classname: 'com.oracle.appbundler.AppBundlerTask') {
+			classpath {
+				fileset(dir: 'lib', includes: 'appbundler-1.0ea.jar' )
+			}
+		}
+		ant.bundleapp(outputdirectory: appBundleDir, 
+					name: appName, 
+					displayname: appName, 
+					executableName: appName, 
+					identifier: "org.kse.${appSimpleName}${appSimpleVersion}", 
+					shortversion: appSimpleVersion, 
+					version: appVersion, 
+					icon: kseIcns,
+					mainclassname: mainClass, 
+					copyright: copyright, 
+					applicationCategory: "public.app-category.developer-tools"					
+					) {
+			classpath(dir: dependenciesDir)
+			classpath(file: jar.archivePath)
+			arch(name: "x86_64")
+			bundledocument(extensions: "ks,jks,jceks,keystore,bks,uber,pfx,p12",
+							icon: keystoreIcns,
+							name: "KeyStore",
+							role: "editor")
+			option(value: "-Dkse.app=true")
+			option(value: "-Dapple.laf.useScreenMenuBar=true")
+			option(value: "-Dcom.apple.macos.use-file-dialog-packages=true")
+			option(value: "-Dcom.apple.macos.useScreenMenuBar=true")
+			option(value: "-Dcom.apple.mrj.application.apple.menu.about.name=${appName}")
+			option(value: "-Dcom.apple.smallTabs=true")
+			option(value: "-Dfile.encoding=UTF-8")
+		}
+	}
+}
+
+task signapp(type: Exec, dependsOn: appbundler) {
+	workingDir appBundleDir
+	commandLine 'codesign', '-s', 'Kai Kramer', "${appBundle}"
+}
+
+task dmg(type: Exec, dependsOn: signapp) {
+	workingDir appBundleDir
+	commandLine '/usr/local/bin/dropdmg', '-y', 'KSE 5', '-o', distsDir, '-b', "${appSimpleName}-${appSimpleVersion}", 
+				'--signing-identity=683348D91DCE57101313B0F2C88C084E1C2C7A31', "${appBundle}"
+}
+
+task resources {
+	description 'Create GNU/Linux resources from templates'
+	def filterProps = [ beginToken: '@', endToken: '@', tokens: [
+			appName: appName, 
+			appSimpleName: appSimpleName, 
+		]]
+	copy {
+		from("$resDir/kse.sh.in")
+		into("$resDir")
+		rename("kse.sh.in", "${appSimpleName}")
+		filter(filterProps, ReplaceTokens)
+	}
+	copy {
+		from("$resDir/kse.desktop.in")
+		into("$resDir")
+		rename("kse.desktop.in", "${appSimpleName}.desktop")
+		filter(filterProps, ReplaceTokens)
+	}
+}

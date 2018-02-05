@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -27,8 +27,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
-import org.apache.commons.io.IOUtils;
 
 /**
  * Transferable for KeyStore entries. <code>DataFlavor.javaFileListFlavor</code>
@@ -93,12 +91,9 @@ public class KeyStoreEntryTransferable implements Transferable {
 			File tmpFile = new File(tempDir, dragEntry.getFileName());
 			tmpFile.deleteOnExit();
 
-			FileOutputStream fos = null;
-			try {
-				fos = new FileOutputStream(tmpFile);
+			try (FileOutputStream fos = new FileOutputStream(tmpFile)) {
 				fos.write(dragEntry.getContent());
-			} finally {
-				IOUtils.closeQuietly(fos);
+				fos.flush();
 			}
 
 			List<File> list = new ArrayList<File>();

@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -23,6 +23,7 @@ import static org.kse.crypto.KeyType.ASYMMETRIC;
 import static org.kse.crypto.SecurityProvider.BOUNCY_CASTLE;
 import static org.kse.crypto.keypair.KeyPairType.DSA;
 import static org.kse.crypto.keypair.KeyPairType.EC;
+import static org.kse.crypto.keypair.KeyPairType.ECDSA;
 import static org.kse.crypto.keypair.KeyPairType.RSA;
 
 import java.math.BigInteger;
@@ -46,6 +47,7 @@ import java.security.spec.RSAPublicKeySpec;
 import java.text.MessageFormat;
 import java.util.ResourceBundle;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.kse.crypto.CryptoException;
 import org.kse.crypto.KeyInfo;
 
@@ -105,6 +107,37 @@ public final class KeyPairUtil {
 	}
 
 	/**
+	 * Generate a EC key pair.
+	 *
+	 * @param curveName
+	 *            Name of the ECC curve
+	 * @param provider A JCE provider.
+	 * @return A key pair
+	 * @throws CryptoException
+	 *             If there was a problem generating the key pair
+	 */
+	public static KeyPair generateECKeyPair(String curveName, Provider provider) throws CryptoException {
+		try {
+			// Get a key pair generator
+			KeyPairGenerator keyPairGen;
+			if (provider != null) {
+				keyPairGen = KeyPairGenerator.getInstance(KeyPairType.EC.jce(), provider);
+			} else {
+				keyPairGen = KeyPairGenerator.getInstance(KeyPairType.EC.jce(), BOUNCY_CASTLE.jce());
+			}
+
+			keyPairGen.initialize(new ECGenParameterSpec(curveName), SecureRandom.getInstance("SHA1PRNG"));
+
+			// Generate and return the key pair
+			KeyPair keyPair = keyPairGen.generateKeyPair();
+			return keyPair;
+		} catch (GeneralSecurityException ex) {
+			throw new CryptoException(MessageFormat.format(res.getString("NoGenerateKeypair.exception.message"),
+					KeyPairType.EC), ex);
+		}
+	}
+
+	/**
 	 * Checks if the passed provider is an instance of "sun.security.mscapi.SunMSCAPI".
 	 *
 	 * @param provider A JCE provider.
@@ -148,38 +181,6 @@ public final class KeyPairUtil {
 
 		return sunJCE.isInstance(provider);
 	}
-
-	/**
-	 * Generate a EC key pair.
-	 *
-	 * @param curveName
-	 *            Name of the ECC curve
-	 * @param provider A JCE provider.
-	 * @return A key pair
-	 * @throws CryptoException
-	 *             If there was a problem generating the key pair
-	 */
-	public static KeyPair generateECKeyPair(String curveName, Provider provider) throws CryptoException {
-		try {
-			// Get a key pair generator
-			KeyPairGenerator keyPairGen;
-			if (provider != null) {
-				keyPairGen = KeyPairGenerator.getInstance(KeyPairType.EC.jce(), provider);
-			} else {
-				keyPairGen = KeyPairGenerator.getInstance(KeyPairType.EC.jce(), BOUNCY_CASTLE.jce());
-			}
-
-			keyPairGen.initialize(new ECGenParameterSpec(curveName), SecureRandom.getInstance("SHA1PRNG"));
-
-			// Generate and return the key pair
-			KeyPair keyPair = keyPairGen.generateKeyPair();
-			return keyPair;
-		} catch (GeneralSecurityException ex) {
-			throw new CryptoException(MessageFormat.format(res.getString("NoGenerateKeypair.exception.message"),
-					KeyPairType.EC), ex);
-		}
-	}
-
 
 	/**
 	 * Get the information about the supplied public key.
@@ -246,7 +247,7 @@ public final class KeyPairUtil {
 				DSAPrivateKeySpec keySpec = keyFact.getKeySpec(privateKey, DSAPrivateKeySpec.class);
 				BigInteger prime = keySpec.getP();
 				return new KeyInfo(ASYMMETRIC, algorithm, prime.toString(2).length());
-			} else if (algorithm.equals(EC.jce())) {
+			} else if (algorithm.equals(EC.jce()) || algorithm.equals(ECDSA.jce())) {
 				ECPrivateKey pubk = (ECPrivateKey) privateKey;
 				int size = pubk.getParams().getOrder().bitLength();
 				return new KeyInfo(ASYMMETRIC, algorithm, size);
@@ -323,7 +324,7 @@ public final class KeyPairUtil {
 
 	private static byte[] sign(byte[] toSign, PrivateKey privateKey, String signatureAlgorithm)
 			throws GeneralSecurityException {
-		Signature signature = Signature.getInstance(signatureAlgorithm);
+		Signature signature = Signature.getInstance(signatureAlgorithm, new BouncyCastleProvider());
 		signature.initSign(privateKey);
 		signature.update(toSign);
 		return signature.sign();
@@ -331,7 +332,7 @@ public final class KeyPairUtil {
 
 	private static boolean verify(byte[] signed, byte[] signaureToVerify, PublicKey publicKey, String signatureAlgorithm)
 			throws GeneralSecurityException {
-		Signature signature = Signature.getInstance(signatureAlgorithm);
+		Signature signature = Signature.getInstance(signatureAlgorithm, new BouncyCastleProvider());
 		signature.initVerify(publicKey);
 		signature.update(signed);
 		return signature.verify(signaureToVerify);

@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -72,7 +72,6 @@ import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.EtchedBorder;
 
-import org.apache.commons.io.IOUtils;
 import org.kse.crypto.jcepolicy.JcePolicyUtil;
 import org.kse.gui.CurrentDirectory;
 import org.kse.gui.CursorUtil;
@@ -81,6 +80,7 @@ import org.kse.gui.JEscDialog;
 import org.kse.gui.PlatformUtil;
 import org.kse.gui.error.DError;
 import org.kse.utilities.io.CopyUtil;
+import org.kse.utilities.io.IOUtils;
 
 import net.miginfocom.swing.MigLayout;
 

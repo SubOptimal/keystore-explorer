@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -730,7 +730,7 @@ public class DViewCertificate extends JEscDialog {
 		X509Certificate cert = getSelectedCertificate();
 
 		try {
-			DViewCertCsrPem dViewCertPem = new DViewCertCsrPem(this, res.getString("DViewCertificate.Pem.Title"),
+			DViewPem dViewCertPem = new DViewPem(this, res.getString("DViewCertificate.Pem.Title"),
 					cert);
 			dViewCertPem.setLocationRelativeTo(this);
 			dViewCertPem.setVisible(true);

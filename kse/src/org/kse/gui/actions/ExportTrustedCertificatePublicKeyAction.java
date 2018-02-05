@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -33,7 +33,6 @@ import java.text.MessageFormat;
 import javax.swing.ImageIcon;
 import javax.swing.JOptionPane;
 
-import org.apache.commons.io.IOUtils;
 import org.kse.crypto.CryptoException;
 import org.kse.crypto.publickey.OpenSslPubUtil;
 import org.kse.crypto.x509.X509CertUtil;
@@ -132,13 +131,9 @@ public class ExportTrustedCertificatePublicKeyAction extends KeyStoreExplorerAct
 	}
 
 	private void exportEncodedPublicKey(byte[] encoded, File exportFile) throws IOException {
-		FileOutputStream fos = null;
-
-		try {
-			fos = new FileOutputStream(exportFile);
+		try (FileOutputStream fos = new FileOutputStream(exportFile)) {
 			fos.write(encoded);
-		} finally {
-			IOUtils.closeQuietly(fos);
+			fos.flush();
 		}
 	}
 }

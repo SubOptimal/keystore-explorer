@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -22,8 +22,6 @@ package org.kse.utilities.io;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
-
-import org.apache.commons.io.IOUtils;
 
 /**
  * Class of utility methods to output data in hex.
@@ -101,13 +99,11 @@ public class HexUtil {
 	 *             If an I/O problem occurs
 	 */
 	public static String getHexClearDump(byte[] bytes) throws IOException {
-		ByteArrayInputStream bais = null;
-
-		try {
+		try (ByteArrayInputStream bais = new ByteArrayInputStream(bytes)) {
 			// Divide dump into 8 byte lines
 			StringBuffer strBuff = new StringBuffer();
 
-			bais = new ByteArrayInputStream(bytes);
+
 			byte[] line = new byte[8];
 			int read = -1;
 			boolean firstLine = true;
@@ -123,8 +119,6 @@ public class HexUtil {
 			}
 
 			return strBuff.toString();
-		} finally {
-			IOUtils.closeQuietly(bais);
 		}
 	}
 

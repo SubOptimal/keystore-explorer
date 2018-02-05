@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -27,8 +27,8 @@ import java.security.NoSuchAlgorithmException;
 import java.text.MessageFormat;
 import java.util.ResourceBundle;
 
-import org.apache.commons.io.IOUtils;
 import org.kse.crypto.CryptoException;
+import org.kse.utilities.io.IOUtils;
 
 /**
  * Provides utility methods for the creation of message digests.

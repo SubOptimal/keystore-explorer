@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -33,7 +33,6 @@ import java.text.MessageFormat;
 import javax.swing.ImageIcon;
 import javax.swing.JOptionPane;
 
-import org.apache.commons.io.IOUtils;
 import org.kse.crypto.CryptoException;
 import org.kse.crypto.Password;
 import org.kse.crypto.csr.CsrType;
@@ -51,6 +50,7 @@ import org.kse.gui.dialogs.DGenerateCsr;
 import org.kse.gui.error.DError;
 import org.kse.utilities.history.KeyStoreHistory;
 import org.kse.utilities.history.KeyStoreState;
+import org.kse.utilities.io.IOUtils;
 
 /**
  * Action to generate a CSR using the selected key pair entry.

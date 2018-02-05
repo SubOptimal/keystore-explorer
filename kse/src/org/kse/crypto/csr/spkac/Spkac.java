@@ -1,6 +1,6 @@
 /*
  * Copyright 2004 - 2013 Wayne Grant
- *           2013 - 2017 Kai Kramer
+ *           2013 - 2018 Kai Kramer
  *
  * This file is part of KeyStore Explorer.
  *
@@ -50,7 +50,6 @@ import java.text.MessageFormat;
 import java.util.Properties;
 import java.util.ResourceBundle;
 
-import org.apache.commons.io.IOUtils;
 import org.bouncycastle.asn1.ASN1EncodableVector;
 import org.bouncycastle.asn1.ASN1Encoding;
 import org.bouncycastle.asn1.ASN1Integer;
@@ -65,6 +64,7 @@ import org.bouncycastle.util.encoders.Base64;
 import org.kse.crypto.keypair.KeyPairType;
 import org.kse.crypto.signing.SignatureType;
 import org.kse.utilities.io.HexUtil;
+import org.kse.utilities.io.IOUtils;
 
 /**
  * Signed Public Key and Challenge (SPKAC). Netscape's CSR format. SPKACs can be
